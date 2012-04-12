@@ -107,9 +107,11 @@ def send_email(html_msg, receivers):
 
 	return True
 
-def run_svnlog(svnurl, start_time, end_time, log = LOG):
+def run_svnlog(svnurl, svnuser, svnpwd, start_time, end_time, log = LOG):
         print svnurl
 	cmd = '"%s" log %s'%(SVN, svnurl) 
+	if (len(svnuser) > 0 and len(svnpwd) > 0):
+                cmd += " --username \"%s\" --password \"%s\"" % (svnuser, svnpwd)
 	#cmd += ' -r"%s"'%(branch,)
 	cmd += ' -r%s:%s -v > %s'%(start_time, end_time, LOG)
 	print "running cmd: ", cmd
@@ -200,6 +202,8 @@ def main():
 	parser.add_option("-e", "--endtime", dest="endtime", help="set date filter for end time",)
 	parser.add_option("-m", "--mail", dest="mail", help="set email address to receive the result, use ',' to split multiple address", default="someone@host")
 	parser.add_option("-o", "--host", dest="host", help="set svn urls",)
+	parser.add_option("-u", "--svnuser", dest="svnuser", help="set svn username", default="")
+	parser.add_option("-p", "--svnpwd", dest="svnpwd", help="set svn password", default="")
 	
 	(options, args) = parser.parse_args()	
 
@@ -230,7 +234,7 @@ def main():
 	#else: branch = "HEAD"
         
 	for svnurl in svnurls:
-                if not run_svnlog(svnurl, start_time, end_time):
+                if not run_svnlog(svnurl, options.svnuser, options.svnpwd, start_time, end_time):
                         print "Err: run svn log error!"
                         return
                 
