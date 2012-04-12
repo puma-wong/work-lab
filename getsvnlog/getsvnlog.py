@@ -14,7 +14,7 @@ if not os.path.exists(SVN): SVN = "svn.exe"
 if os.name == "posix": SVN = "svn"
 
 LOG = os.path.join(os.getcwd(), "log.txt")
-RESULT = os.path.join(os.getcwd(), "result_design.html")
+RESULT = os.path.join(os.getcwd(), "commit_result.html")
 
 flag0 = "------------------------------------------------------------------------"
 flag1 = "Changed paths:"
@@ -26,11 +26,6 @@ flag5 = "==========="
 flag6 = "author: "
 flag7 = "revision "
 
-start_time = None
-end_time = None
-receivers = None
-branch = None
-svnurl = None
 
 html = """
 <HTML>
@@ -49,6 +44,8 @@ html = """
 	</TBODY>
 </TABLE> 
 <br/>Note: A：增加；M：修改；C：冲突；D：删除；R：替换
+<br/>
+<br/>
 </BODY>
 <HR size=5 color="red"> 
 </HTML>
@@ -61,9 +58,22 @@ empty = """
 	<META name=GENERATOR content="MSHTML 8.00.6001.18854"><LINK rel=stylesheet 
 	href="BLOCKQUOTE{margin-Top: 0px; margin-Bottom: 0px; margin-Left: 2em}">
 </HEAD>
+
 <BODY style="MARGIN: 10px; FONT-FAMILY: verdana; FONT-SIZE: 10pt">
-太好了,$$FROM_TIME$$ 至 $$END_TIME$$这段时间没人提交$$BRANCH$$分支的文件...
+<TABLE style="font-size: 10pt;" border="1" cellpadding="4" cellspacing="0">
+	<TBODY>
+	   <tr><td colspan="5" style="text-align: center; font-weight: bold;">$$BRANCH$$ 提交记录</td></tr>
+	   <tr><td colspan="5" style="text-align: center;">统计时间段:$$FROM_TIME$$ 至 $$END_TIME$$</td></tr>
+	   <tr><td>版本号</td><td>时间</td><td>文件</td><td>变更</td><td>提交注释</td></tr>
+		<!--	<tr><td colspan="5" style="text-align: center; font-weight: bold;">真糟糕,$$FROM_TIME$$ 至 $$END_TIME$$这段时间没人提交$$BRANCH$$分支的文件...</td></tr> -->
+			<tr><td colspan="5" style="text-align: center; font-weight: bold;">噢糟糕,这段时间无任何提交...</td></tr>
+	</TBODY>
+</TABLE> 
+<br/>
+<br/>
+<br/>
 </BODY>
+<HR size=5 color="red"> 
 </HTML>
 """
 
@@ -76,7 +86,6 @@ def send_email(html_msg, receivers):
 
 	msg = MIMEMultipart('related')
 	msg['Subject'] = Header("svn提交记录通知", 'gbk')
-	
 	##发邮件的相关设定##
 	msg['From'] = "someone@host"
 	msg['To'] = receivers
@@ -98,43 +107,9 @@ def send_email(html_msg, receivers):
 
 	return True
 
-def run_svnlog():
-	global start_time, end_time, receivers, branch, svnurl
-	parser = OptionParser()
-	#parser.add_option("-w", "--workdir", dest="workdir", help="local code dir",)
-	#parser.add_option("-a", "--author", dest="author", help="set filter for commitor",)
-	#parser.add_option("-b", "--branch", dest="branch", help="set filter for branch",)
-	parser.add_option("-s", "--starttime", dest="starttime", help="set date filter for start time",)
-	parser.add_option("-e", "--endtime", dest="endtime", help="set date filter for end time",)
-	#parser.add_option("-m", "--mail", dest="mail", help="set email address to receive the result, use ',' to split multiple address",)
-	parser.add_option("-o", "--host", dest="host", help="set svn url",)
-	
-	(options, args) = parser.parse_args()
-	#if options.mail: receivers = options.mail	
-
-	if options.host: svnurl = options.host
+def run_svnlog(svnurl, start_time, end_time, log = LOG):
         print svnurl
 	cmd = '"%s" log %s'%(SVN, svnurl) 
-
-	#if options.workdir:
-	#	if os.path.exists(options.workdir):
-	#		os.chdir(options.workdir)
-	#	else:
-	#		print "Err: %s is not a valid path"%(options.workdir)
-	#		return False
-
-	if options.starttime: start_time = "{"+options.starttime+"}"
-	else:
-		if int(datetime.datetime.today().strftime("%H")) >= 6:
-			start_time = datetime.date.today().strftime("{%Y-%m-%d}")
-		else:
-			yesterday = datetime.date.today() - datetime.timedelta(1)
-			start_time = yesterday.strftime("{%Y-%m-%d}")
-	if options.endtime: end_time = "{"+options.endtime+"}"
-	else: end_time = (datetime.datetime.today() + datetime.timedelta(1)).strftime("{%Y-%m-%d}")
-	#if options.author: cmd += ' -w"%s"'%(options.author,)
-	#if options.branch: branch = options.branch
-	#else: branch = "HEAD"
 	#cmd += ' -r"%s"'%(branch,)
 	cmd += ' -r%s:%s -v > %s'%(start_time, end_time, LOG)
 	print "running cmd: ", cmd
@@ -142,7 +117,7 @@ def run_svnlog():
 	if os.system(cmd): return False
 	else: return True
 
-def gene_html():
+def gene_html(svnurl, start_time, end_time):
 	if not os.path.exists(LOG): return False
 
 	f = open(LOG)
@@ -176,7 +151,7 @@ def gene_html():
         		author = com_infos[1].strip()
         		date = com_infos[2][0:20].strip()
 
-#可以指定只选取某人的提交信息##
+##可以指定只选取某人的提交信息##
 #        		if cmp(author,"zhuli"):
 #                                bFollowMsg = False
 #                        else:
@@ -195,7 +170,7 @@ def gene_html():
 			if len(l) == 0: continue
 			msg += l;
 	f.close()
-	
+
 	if contents:
 		tables = "\n		".join(contents)
 		content = html.replace("$$CONTENT$$", tables)
@@ -210,12 +185,58 @@ def gene_html():
 	return content
 
 def main():
-	if not run_svnlog():
-		print "Err: run svn log error!"
-		return
+        start_time = None
+        end_time = None
+        receivers = None
+        branch = None
+        svnurls = []
+        html_msg = ""
+        
+	parser = OptionParser()
+	#parser.add_option("-w", "--workdir", dest="workdir", help="local code dir",)
+	#parser.add_option("-a", "--author", dest="author", help="set filter for commitor",)
+	#parser.add_option("-b", "--branch", dest="branch", help="set filter for branch",)
+	parser.add_option("-s", "--starttime", dest="starttime", help="set date filter for start time",)
+	parser.add_option("-e", "--endtime", dest="endtime", help="set date filter for end time",)
+	parser.add_option("-m", "--mail", dest="mail", help="set email address to receive the result, use ',' to split multiple address", default="someone@host")
+	parser.add_option("-o", "--host", dest="host", help="set svn urls",)
 	
-	print "do svn log query ok!"
-	html_msg = gene_html()
+	(options, args) = parser.parse_args()	
+
+	if options.host:
+                svnurls = options.host.split(";")
+        if len(svnurls) < 1:
+                print "Err: No svn url, do nothing."
+                return
+        if options.mail: receivers = options.mail
+        #if options.workdir:
+	#	if os.path.exists(options.workdir):
+	#		os.chdir(options.workdir)
+	#	else:
+	#		print "Err: %s is not a valid path"%(options.workdir)
+	#		return False
+
+	if options.starttime: start_time = "{"+options.starttime+"}"
+	else:
+		if int(datetime.datetime.today().strftime("%H")) >= 6:
+			start_time = datetime.date.today().strftime("{%Y-%m-%d}")
+		else:
+			yesterday = datetime.date.today() - datetime.timedelta(1)
+			start_time = yesterday.strftime("{%Y-%m-%d}")
+	if options.endtime: end_time = "{"+options.endtime+"}"
+	else: end_time = (datetime.datetime.today() + datetime.timedelta(1)).strftime("{%Y-%m-%d}")
+	#if options.author: cmd += ' -w"%s"'%(options.author,)
+	#if options.branch: branch = options.branch
+	#else: branch = "HEAD"
+        
+	for svnurl in svnurls:
+                if not run_svnlog(svnurl, start_time, end_time):
+                        print "Err: run svn log error!"
+                        return
+                
+                print "do svn log query ok!"
+                html_msg += gene_html(svnurl, start_time, end_time)
+	
 	if receivers:
 		send_email(html_msg, receivers)
 		print "send result mail ok!"
